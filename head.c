@@ -38,7 +38,7 @@
 /*To process when head has no arguments*/
 int process_input(const char* filename, ssize_t max_num_lines){
     if(max_num_lines > (ssize_t)INT64_MAX){
-        fprintf(stderr, "Error: cannot handle memory that large, %s\n", strerror(errno));
+        better_write(STDERR_FILENO,"Error: Memory requirement too big\n",sizeof("Error: Memory requirement too big\n"));
         return 1;
     }
 
@@ -52,17 +52,17 @@ int process_input(const char* filename, ssize_t max_num_lines){
     }else{
         fd = open(filename, O_RDONLY);
         if(fd<0){
-            fprintf(stderr,"Error opening file %s\n",strerror(errno));
+            better_write(STDERR_FILENO,"Error: No such file\n",sizeof("Error: No such file\n"));
             return 1;
         }
     }
 
     /*Initialize line buffer*/
     ssize_t read_result;
-    size_t buffer_size = 4096;
+    size_t buffer_size = 8192;
     char *buffer = calloc(buffer_size, sizeof(char));
     if(buffer==NULL){
-        fprintf(stderr,"Memory allocation failed, %s\n", strerror(errno));
+        better_write(STDERR_FILENO,"Error: Not enough memory\n",sizeof("Error: Not enough memory\n"));
         if(fd != STDIN_FILENO) close(fd);
         return 1;
     }
@@ -80,7 +80,7 @@ int process_input(const char* filename, ssize_t max_num_lines){
         read_result = read(fd, &current_char, 1);
         /*Error reading*/
         if(read_result < (ssize_t)0){
-            fprintf(stderr,"Error reading file %s\n",strerror(errno));
+            better_write(STDERR_FILENO,"Failed reading file\n",sizeof("Failed reading file\n"));
             free(buffer);
             if(fd != STDIN_FILENO) close(fd);
             return 1;
@@ -90,7 +90,7 @@ int process_input(const char* filename, ssize_t max_num_lines){
         if(read_result == (ssize_t)0){
             if(position > 0){
                 if(better_write(STDOUT_FILENO, line_start, position) < (ssize_t)0){
-                    fprintf(stderr,"Error writing to stdout\n");
+                    better_write(STDERR_FILENO,"Error: Failed writing\n",sizeof("Error: Failed writing\n"));
                     free(buffer);
                     if(fd != STDIN_FILENO) close(fd);
                     return 1;
@@ -108,7 +108,7 @@ int process_input(const char* filename, ssize_t max_num_lines){
             buffer_size += buffer_size;
             char * new_buffer = realloc(buffer, buffer_size);
             if(new_buffer == NULL){
-                fprintf(stderr,"Memory allocation failed, %s\n",strerror(errno));
+                better_write(STDERR_FILENO,"Error allocating memory\n",sizeof("Error allocating memory\n"));
                 free(buffer);
                 if(fd != STDIN_FILENO) close(fd);
                 return 1;
@@ -120,20 +120,13 @@ int process_input(const char* filename, ssize_t max_num_lines){
         if(current_char == '\n'){
             lines_read++;
             if(better_write(STDOUT_FILENO, line_start, position) < (ssize_t)0){
-                fprintf(stderr,"Error writing to stdout\n");
+                better_write(STDERR_FILENO,"Error writing line\n",sizeof("Error writing line\n"));
                 free(buffer);
                 if(fd != STDIN_FILENO) close(fd);
                 return 1;
             }
             position = 0;
         }
-    }
-
-    if(better_write(STDOUT_FILENO, "\n", 1) < (ssize_t)0){
-        fprintf(stderr,"Error writing to stdout\n");
-        free(buffer);
-        if(fd != STDIN_FILENO) close(fd);
-        return 1;
     }
 
     free(buffer);
@@ -167,11 +160,11 @@ int main(int argc, char const **argv){
                 num_lines = my_atoi(argv[2]);
                 return process_input(filename, num_lines);
             }else{
-                fprintf(stderr,"Error: %s is not a number\n",argv[2]);
+                better_write(STDERR_FILENO,"Error: not a number\n",sizeof("Error: not a number\n"));
                 return 1;
             }
         }else{
-            fprintf(stderr,"Error: %s is not a valid argument\n",argv[1]);
+            better_write(STDERR_FILENO,"Error: Illegal use of -n\n",sizeof(sizeof("Error: Illegal use of -n\n")));
             return 1;
         }
     }
@@ -184,7 +177,7 @@ int main(int argc, char const **argv){
                 filename = argv[3];
                 return process_input(filename, num_lines);
             }else{
-                fprintf(stderr,"Error: %s is not a number\n",argv[2]);
+                better_write(STDERR_FILENO,"Error: Number required for argument after -n\n",sizeof("Error: Number required for argument after -n\n"));
                 return 1;
             }
         }else{
@@ -194,15 +187,16 @@ int main(int argc, char const **argv){
                     num_lines = my_atoi(argv[3]);
                     return process_input(filename, num_lines);
                 }else{
-                    fprintf(stderr,"Error: %s is not a number\n",argv[3]);
+                    better_write(STDERR_FILENO,"Error: Number required for argument after -n\n",sizeof("Error: Number required for argument after -n\n"));
                     return 1;
                 }
             }else{
-                fprintf(stderr,"Error: %s is not a valid argument\n",argv[2]);
+                better_write(STDERR_FILENO,"Error: Illegal use of -n\n",sizeof("Error: Illegal use of -n\n"));
                 return 1;
             }
         }
     }
 
-    fprintf(stderr,"Error: invalid number of arguments\n");
+    better_write(STDERR_FILENO,"Too many arguments\n",sizeof("Too many arguments\n"));
+    return 1;
 }
