@@ -51,7 +51,8 @@ int my_strcmp(const char *arg, const char *cmp){
         arg++;
         cmp++;
     }
-    return 0;
+    if(*arg == '\0' && *cmp == '\0') return 0;
+    return 1;
 }
 
 int my_atoi(const char *arg){
