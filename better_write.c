@@ -56,10 +56,15 @@ int my_strcmp(const char *arg, const char *cmp){
 }
 
 int my_atoi(const char *arg){
+
   int result = 0;
   if (arg[0] == '-') result = -1;
   for(int i = 0; arg[i] != '\0'; i++){
     result = result * 10 + arg[i] - '0';
   }
   return result;
+}
+
+void display_error_message(const char *message){
+  int write_Result = better_write(2,message,sizeof(message));
 }

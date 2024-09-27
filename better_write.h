@@ -6,5 +6,6 @@ int is_number(const char *arg);
 int my_strlen(const char *arg);
 int my_strcmp(const char *arg, const char *cmp);
 int my_atoi(const char *arg);
+void display_error_message(const char *message);
 
 #endif
