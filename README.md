@@ -213,3 +213,19 @@ Dload Upload Total Spent Left Speed
 989992Saginaw MI
 989996Saginaw MI
 ```
+
+## Part 3: Head and tail
+### Head
+- For head we needed to comprehend more the read and write function, so we delved more into the manuals and online resources, as well as for open. With this, we got to know more about what they did, what they returned, and what defined variables we're able to use from `fcntl.h` and `unistd.h`. The most useful of these being `O_RDONLY` for opening files in read only mode, `STDIN_FILENO`, `STDOUT_FILENO`, and `STDERR_FILENO` for file definitions for standard input, output, and error.
+- From here, we had to decide which approach to take with head. Here we settled on reading the whole file first into memory, then analyzing character by character if we can stop printing or not. We decided on this after investigating the overhead that to many interrupts by context switching could cause was greater than just reading the characters one by one until we were done printing.
+- We decided to keep track of the start of each line and its end to use in the buffer in better_write:
+```c
+(better_write(STDOUT_FILENO,buffer+line_start,position-line_start)
+```
+### Tail
+- For tail, we decided a similar approach, since it would be much less interrupts by the OS than identifying the lines one by one, plus, it would allow us to start storing the last $n$ lines from the end of the file upwards, handling some edge cases along the way, such as if our last line was just `\n`, or when we read up to the first char in the file based on the `-n` input.
+- On both head and tail we managed the various edge cases provided (eg. no arguments, file argument, invalid handling of `-n`, etc.).
+### Observations
+We mainly struggled on reading the lines more than anything, but compilation both on Dandelion and our machines show no warnings, as well as the use of valgrind and gdb show no issues.
+
+## Part 4: Find location
