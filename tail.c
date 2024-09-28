@@ -190,12 +190,15 @@ int process_input(const char* filename, ssize_t max_num_lines){
     }
 
     /* Save last max_num_lines by iterating backwards */
-    size_t position = total_chars_read;
-    size_t line_end = total_chars_read;
+    size_t position = total_chars_read, line_end = total_chars_read;
     ssize_t current_line = max_num_lines - 1;
+    int last_line_has_newline = 0;
 
     while (current_line >= 0 && position > 0) {
-        position--;  // Decrement position first to avoid out-of-bounds
+        position--;
+
+        /* Mark if the last line in the file has a newline */
+        if (current_line == max_num_lines - 1 && position == total_chars_read - 1 && buffer[position] == '\n')     last_line_has_newline = 1;
 
         /* Handle newline */
         if (buffer[position] == '\n') {
@@ -204,7 +207,7 @@ int process_input(const char* filename, ssize_t max_num_lines){
 
             /* Ensure lines_lengths is not zero before allocating memory */
             if (lines_lengths[current_line] > 0) {
-                lines[current_line] = calloc(lines_lengths[current_line] + 2, sizeof(char));  // +2 for \n and \0
+                lines[current_line] = calloc(lines_lengths[current_line] + 2, sizeof(char));
                 if (lines[current_line] == NULL) {
                     display_error_message("Error allocating memory\n");
                     return gc(lines, max_num_lines, fd);
@@ -230,7 +233,7 @@ int process_input(const char* filename, ssize_t max_num_lines){
         lines_lengths[current_line] = line_end;
 
         if (lines_lengths[current_line] > 0) {
-            lines[current_line] = calloc(lines_lengths[current_line] + 1, sizeof(char));
+            lines[current_line] = calloc(lines_lengths[current_line] + 2, sizeof(char));
             if (lines[current_line] == NULL) {
                 display_error_message("Error allocating memory\n");
                 return gc(lines, max_num_lines, fd);
@@ -241,14 +244,22 @@ int process_input(const char* filename, ssize_t max_num_lines){
                 lines[current_line][i] = buffer[i];
             }
 
-            /* Add null terminator */
-            lines[current_line][lines_lengths[current_line]] = '\0';
+            /* Add newline and null terminator if appropriate */
+            if (last_line_has_newline == 1) {
+                lines[current_line][lines_lengths[current_line]] = '\n';
+                lines[current_line][lines_lengths[current_line] + 1] = '\0';
+            } else {
+                lines[current_line][lines_lengths[current_line]] = '\0';
+            }
         }
     }
 
+
     /* Remove null terminator from printing */
-    if (lines[max_num_lines - 1][lines_lengths[max_num_lines - 1]] == '\0') {
-        lines_lengths[max_num_lines - 1]--;
+    if (lines[max_num_lines - 1] != NULL && lines_lengths[max_num_lines - 1] > 0) {
+        if (lines[max_num_lines - 1][lines_lengths[max_num_lines - 1]] == '\0') {
+            lines_lengths[max_num_lines - 1]--;
+        }
     }
 
     /* We don't need the buffer anymore, so we discard it */
