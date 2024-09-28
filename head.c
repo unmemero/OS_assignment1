@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <string.h>
+#include <sys/resource.h>
 
 /*
     Better write function
@@ -64,13 +65,17 @@ int my_strlen(const char *arg){
 /*
     To compare two strings
 */
-int my_strcmp(const char *arg, const char *cmp){
-    while(*arg != '\0' && *cmp != '\0'){
-        if(*arg != *cmp) return 1;
+int my_strcmp(const char *arg, const char *cmp) {
+    while (*arg != '\0' && *cmp != '\0') {
+        if (*arg != *cmp) {
+            if(*arg < *cmp) return -1;
+            return 1;  
+        }
         arg++;
         cmp++;
     }
-    if(*arg == '\0' && *cmp == '\0') return 0;
+    if (*arg == '\0' && *cmp == '\0') return 0;
+    if(*arg == '\0') return -1;
     return 1;
 }
 
@@ -98,8 +103,10 @@ void display_error_message(const char *message){
     To process when head has no arguments
 */
 int process_input(const char* filename, ssize_t max_num_lines){
-    if(max_num_lines > (ssize_t)INT64_MAX){
-        display_error_message("Error: Number of lines is too large\n");
+    struct rlimit rl;
+    int limit_result;
+    if((limit_result = getrlimit(RLIMIT_STACK,&rl) < 0)){
+        display_error_message("Unable to fetch amount of memory\n");
         return 1;
     }
 
@@ -143,21 +150,21 @@ int process_input(const char* filename, ssize_t max_num_lines){
         }
     }
 
-    /*Iterate through buffer until lines printed = max_num_lines or EOF*/
-    size_t position = (size_t)0, current_line = (size_t)0, line_start = (size_t)0;
-    while(current_line<max_num_lines && position < total_bytes_read){
-        if(buffer[position] == '\n'){
-            if((better_write(STDOUT_FILENO,buffer+line_start,position-line_start)) < 0){
-                display_error_message("Error on writing into STDOUT");
-                if(fd != STDIN_FILENO) close(fd);
-                free(buffer);
-                return 1;
-            }
-            current_line++;
-            line_start = position;
+    /* Iterate through buffer until lines printed = max_num_lines or EOF */
+size_t position = (size_t)0, current_line = (size_t)0, line_start = (size_t)0;
+while (current_line < max_num_lines && position <= total_bytes_read) {
+    if (buffer[position] == '\n' || position == total_bytes_read) {
+        if ((better_write(STDOUT_FILENO, buffer + line_start, position - line_start + 1)) < 0) {
+            display_error_message("Error on writing into STDOUT");
+            if (fd != STDIN_FILENO) close(fd);
+            free(buffer);
+            return 1;
         }
-        position++;
+        current_line++;
+        line_start = position + 1;
     }
+    position++;
+}
 
     free(buffer);
     if(fd != STDIN_FILENO) close(fd);

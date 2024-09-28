@@ -224,8 +224,14 @@ Dload Upload Total Spent Left Speed
 ```
 ### Tail
 - For tail, we decided a similar approach, since it would be much less interrupts by the OS than identifying the lines one by one, plus, it would allow us to start storing the last $n$ lines from the end of the file upwards, handling some edge cases along the way, such as if our last line was just `\n`, or when we read up to the first char in the file based on the `-n` input.
+- Due to segfaults on large numbers of lines, learned about `getrlimit` level 2 function, which allows to see currently allocated resources for process. This function returns the number of bytes available for process when used with option `RLIMIT_STACK`. Getting the value from the struct initialized by the system call(`rl.rlim_curr`), we can get the max number allowed of lines and tell the user we're unable to provide them. 
 - On both head and tail we managed the various edge cases provided (eg. no arguments, file argument, invalid handling of `-n`, etc.).
 ### Observations
 We mainly struggled on reading the lines more than anything, but compilation both on Dandelion and our machines show no warnings, as well as the use of valgrind and gdb show no issues.
 
 ## Part 4: Find location
+- The part we struggled the most was implementing binary search, since we had a bit of trouble doing the line selection without a buffer, but since we're assuming files must be formatted like the `nanpa` file, we decided to modify the function based on the line size.
+- It took us a bit of investigating, as well as some trial and error to determine if the file is seekable, as well as how to map it and unmap it.
+- We decided to use the previous approach of reading the whole file first, then iterating through each group of 6 letters and jumping over partial matches.
+## Conclusions
+Overall, this grew out knowledge on the inner workings of multiple Linux utilities, and allowed us to use and improve implementations of some basic functions built in Computer Organization (like `strlen`).  This was a very important way for us to understand how to use level 2 functions, as well as what to use them for.

@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/resource.h>
 
 /*
     Better write function
@@ -64,13 +65,17 @@ int my_strlen(const char *arg){
 /*
     To compare two strings
 */
-int my_strcmp(const char *arg, const char *cmp){
-    while(*arg != '\0' && *cmp != '\0'){
-        if(*arg != *cmp) return 1;
+int my_strcmp(const char *arg, const char *cmp) {
+    while (*arg != '\0' && *cmp != '\0') {
+        if (*arg != *cmp) {
+            if(*arg < *cmp) return -1;
+            return 1;  
+        }
         arg++;
         cmp++;
     }
-    if(*arg == '\0' && *cmp == '\0') return 0;
+    if (*arg == '\0' && *cmp == '\0') return 0;
+    if(*arg == '\0') return -1;
     return 1;
 }
 
@@ -119,8 +124,15 @@ int gc(char **last_lines, ssize_t max_num_lines, int fd){
 */
 int process_input(const char* filename, ssize_t max_num_lines){
     /*Number of lines too many*/
-    if(max_num_lines > (ssize_t)INT64_MAX){
-            display_error_message("Error: Number of lines is too large\n");
+    struct rlimit rl;
+    int limit_result;
+    if((limit_result = getrlimit(RLIMIT_STACK,&rl) < 0)){
+        display_error_message("Unable to fetch amount of memory\n");
+        return 1;
+    }
+
+    if(max_num_lines > (ssize_t)INT64_MAX || max_num_lines > (rl.rlim_cur/sizeof(char *))){
+        display_error_message("Error: Number of lines is too large\n");
         return 1;
     }
     /*0 or negative lines requested by user*/
@@ -160,7 +172,7 @@ int process_input(const char* filename, ssize_t max_num_lines){
     size_t total_chars_read = (size_t)0;
     while((read_result = read(fd, buffer + total_chars_read, buffer_size - total_chars_read)) > 0){
         total_chars_read += read_result;
-        if(total_chars_read >= read_result){
+        if(total_chars_read == buffer_size){
             buffer_size += buffer_size;
             char *newbuffer;
             if((newbuffer = realloc(buffer, buffer_size)) == NULL){ 
@@ -178,92 +190,80 @@ int process_input(const char* filename, ssize_t max_num_lines){
     }
 
     /* Save last max_num_lines by iterating backwards */
-    size_t position = total_chars_read - 1;
+    size_t position = total_chars_read;
     size_t line_end = total_chars_read;
     ssize_t current_line = max_num_lines - 1;
 
-    while (current_line >= 0) {
-        /* Handle the start of the read source (beginning of the buffer) */
+    while (current_line >= 0 && position > 0) {
+        position--;  // Decrement position first to avoid out-of-bounds
 
-        if (position == 0) {
-            lines_lengths[current_line] = line_end - position + 1;
+        /* Handle newline */
+        if (buffer[position] == '\n') {
+            size_t line_start = position + 1;
+            lines_lengths[current_line] = line_end - line_start;
+
+            /* Ensure lines_lengths is not zero before allocating memory */
             if (lines_lengths[current_line] > 0) {
-                lines[current_line] = calloc(lines_lengths[current_line] + 2, sizeof(char));
+                lines[current_line] = calloc(lines_lengths[current_line] + 2, sizeof(char));  // +2 for \n and \0
                 if (lines[current_line] == NULL) {
                     display_error_message("Error allocating memory\n");
                     return gc(lines, max_num_lines, fd);
                 }
 
-                /* Manually copy the remaining characters to the last line */
+                /* Copy the line into the lines array */
                 for (size_t i = 0; i < lines_lengths[current_line]; i++) {
-                    lines[current_line][i] = buffer[position + i];
+                    lines[current_line][i] = buffer[line_start + i];
                 }
-                lines[current_line][lines_lengths[current_line] - 1] = '\n';
-                lines[current_line][lines_lengths[current_line]] = '\0';
-            }
-            break;
-        }
 
-        /* Handle newline */
-        if (buffer[position] == '\n') {
-            /* Handle last char being newline */
-            if (position == total_chars_read - 1) {  // Should compare to total_chars_read - 1
-                lines_lengths[current_line] = 1;
-                lines[current_line] = calloc(2, sizeof(char));
-                if (lines[current_line] == NULL) {
-                    display_error_message("Error allocating memory");
-                    return gc(lines, max_num_lines, fd);
-                }
-                lines[current_line][0] = '\n';
-                lines[current_line][1] = '\0'; 
-            } else {
-                size_t line_start = position + 1;
-                lines_lengths[current_line] = line_end - line_start + 1;
-                
-                /* Ensure lines_lengths is not zero before allocating memory */
-                if (lines_lengths[current_line] > 0) {
-                    lines[current_line] = calloc(lines_lengths[current_line] + 2, sizeof(char));
-                    if (lines[current_line] == NULL) {
-                        display_error_message("Error allocating memory");
-                        return gc(lines, max_num_lines, fd);
-                    }
-
-                    for (size_t i = 0; i < lines_lengths[current_line]; i++) {
-                        lines[current_line][i] = buffer[line_start + i];
-                    }
-
-                    if(line_end != total_chars_read)  lines[current_line][lines_lengths[current_line] - 1] = '\n';
-                    lines[current_line][lines_lengths[current_line]] = '\0';
-                }
+                /* Add newline and null terminator */
+                lines[current_line][lines_lengths[current_line]] = '\n';
+                lines[current_line][lines_lengths[current_line] + 1] = '\0';
             }
 
             current_line--;
             line_end = position;
         }
-
-        position--;
-
-        /* Prevent going out of bounds */
-        if (position < 0) break;
     }
 
-    /*Remove null terminator from printing*/
-    if(lines[max_num_lines-1][lines_lengths[max_num_lines-1]] == '\0')lines_lengths[max_num_lines - 1]--;
+    /* Handle case where there is no newline at the start of the buffer */
+    if (position == 0 && current_line >= 0) {
+        lines_lengths[current_line] = line_end;
 
-    /*We don't need the buffer anymore, so we discard it*/
-    free(buffer);
+        if (lines_lengths[current_line] > 0) {
+            lines[current_line] = calloc(lines_lengths[current_line] + 1, sizeof(char));
+            if (lines[current_line] == NULL) {
+                display_error_message("Error allocating memory\n");
+                return gc(lines, max_num_lines, fd);
+            }
 
-    /*print last lines using better_write*/
-    
-    for(size_t i = (size_t)0; i < max_num_lines; i++){
-        if((better_write(STDOUT_FILENO,lines[i],lines_lengths[i])) < (ssize_t)0){
-            display_error_message("Error writing into STDOUT\n");
-            return gc(lines,max_num_lines,fd);
+            /* Manually copy the remaining characters to the last line */
+            for (size_t i = 0; i < lines_lengths[current_line]; i++) {
+                lines[current_line][i] = buffer[i];
+            }
+
+            /* Add null terminator */
+            lines[current_line][lines_lengths[current_line]] = '\0';
         }
     }
 
-    /*Garbage collection and return*/
-    gc(lines, max_num_lines,fd);    
+    /* Remove null terminator from printing */
+    if (lines[max_num_lines - 1][lines_lengths[max_num_lines - 1]] == '\0') {
+        lines_lengths[max_num_lines - 1]--;
+    }
+
+    /* We don't need the buffer anymore, so we discard it */
+    free(buffer);
+
+    /* Print last lines using better_write */   
+    for (size_t i = 0; i < max_num_lines; i++) {
+        if (lines[i] != NULL && better_write(STDOUT_FILENO, lines[i], lines_lengths[i]+1) < (ssize_t)0) {
+            display_error_message("Error writing into STDOUT\n");
+            return gc(lines, max_num_lines, fd);
+        }
+    }
+
+    /* Garbage collection and return */
+    gc(lines, max_num_lines, fd);    
     return 0;
 }
 
